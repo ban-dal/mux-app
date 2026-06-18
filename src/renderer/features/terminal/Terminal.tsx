@@ -11,14 +11,13 @@ interface Props {
   autoSpawn?: SpawnOptions;
   /** If provided, sent to stdin immediately after the PTY spawns (e.g. 'claude') */
   initInput?: string;
-  /** Increment to imperatively request focus */
-  focusTick?: number;
 }
 
-export function Terminal({ autoSpawn, initInput, focusTick }: Props) {
+export function Terminal({ autoSpawn, initInput }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const spawningRef = useRef(false);
   const [status, setStatus] = useState<Status>('idle');
   const [exitInfo, setExitInfo] = useState<{ exitCode: number; signal: number } | null>(null);
   const [isFocused, setIsFocused] = useState(false);
@@ -72,12 +71,13 @@ export function Terminal({ autoSpawn, initInput, focusTick }: Props) {
     }
 
     return () => {
+      // Disconnect observer before dispose to prevent callbacks on a disposed addon
+      observer.disconnect();
       term.textarea?.removeEventListener('focus', onTermFocus);
       term.textarea?.removeEventListener('blur', onTermBlur);
       removeData();
       removeExit();
       onInput.dispose();
-      observer.disconnect();
       term.dispose();
       termRef.current = null;
       fitAddonRef.current = null;
@@ -86,31 +86,30 @@ export function Terminal({ autoSpawn, initInput, focusTick }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    if (focusTick && focusTick > 0) termRef.current?.focus();
-  }, [focusTick]);
-
   const doSpawn = async (opts?: SpawnOptions, afterInput?: string) => {
-    setStatus('running');
-    setExitInfo(null);
-    termRef.current?.clear();
-    await window.pty.spawn(opts);
-    if (fitAddonRef.current && termRef.current) {
-      fitAddonRef.current.fit();
-      window.pty.resize(termRef.current.cols, termRef.current.rows);
-    }
-    if (afterInput) {
-      window.pty.sendInput(afterInput + '\r');
+    if (spawningRef.current) return;
+    spawningRef.current = true;
+    try {
+      setStatus('running');
+      setExitInfo(null);
+      termRef.current?.clear();
+      await window.pty.spawn(opts);
+      if (fitAddonRef.current && termRef.current) {
+        fitAddonRef.current.fit();
+        window.pty.resize(termRef.current.cols, termRef.current.rows);
+      }
+      if (afterInput) {
+        window.pty.sendInput(afterInput + '\r');
+      }
+    } finally {
+      spawningRef.current = false;
     }
   };
 
   const focusTerminal = () => termRef.current?.focus();
 
   return (
-    <div
-      style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#1e1e1e' }}
-      onClick={focusTerminal}
-    >
+    <div style={styles.root} onClick={focusTerminal}>
       <div style={{ ...styles.header, borderBottom: isFocused ? '1px solid #3b82f6' : '1px solid #3e3e3e' }}>
         <span style={styles.headerTitle}>Terminal</span>
         <StatusBadge status={status} exitCode={exitInfo?.exitCode} />
@@ -125,7 +124,7 @@ export function Terminal({ autoSpawn, initInput, focusTick }: Props) {
           {status === 'idle' ? 'Open' : status === 'running' ? 'Running…' : 'Reopen'}
         </button>
       </div>
-      <div ref={containerRef} style={{ flex: 1, overflow: 'hidden', padding: '4px 0', cursor: 'text' }} />
+      <div ref={containerRef} style={styles.canvas} />
     </div>
   );
 }
@@ -144,6 +143,12 @@ function StatusBadge({ status, exitCode }: { status: Status; exitCode?: number }
 }
 
 const styles: Record<string, React.CSSProperties> = {
+  root: {
+    display: 'flex',
+    flexDirection: 'column',
+    height: '100%',
+    background: '#1e1e1e',
+  },
   header: {
     display: 'flex',
     alignItems: 'center',
@@ -157,6 +162,12 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
     fontWeight: 500,
     flex: 1,
+  },
+  canvas: {
+    flex: 1,
+    overflow: 'hidden',
+    padding: '4px 0',
+    cursor: 'text',
   },
   spawnBtn: {
     padding: '4px 10px',

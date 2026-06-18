@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import type { CliId } from '../../main/cli/cli-detector';
 import { Terminal } from '../features/terminal/Terminal';
 import { ChatInput } from '../features/chat/ChatInput';
@@ -9,68 +8,6 @@ interface Props {
 }
 
 export function MainLayout({ selectedCli, onChangeCli }: Props) {
-  const [termFocusTick, setTermFocusTick] = useState(0);
-  const [chatFocusTick, setChatFocusTick] = useState(0);
-
-  // Auto-focus: terminal on start, switch to chat once PTY output settles.
-  // Trust dialog detection: while trust prompt is visible no new data flows —
-  // suppress the idle timer so we don't steal focus mid-dialog.
-  // Only start the idle countdown after the dialog is resolved (new data arrives).
-  useEffect(() => {
-    let idleTimer: ReturnType<typeof setTimeout> | null = null;
-    let done = false;
-    let trustDialogActive = false;
-    let removeDataFn: (() => void) | null = null;
-    let removeExitFn: (() => void) | null = null;
-
-    // eslint-disable-next-line no-control-regex
-    const ANSI_RE = /[[0-9;]*[a-zA-Z]|][^]*|[()][AB012]/g;
-    const TRUST_RE = /trust.*folder|safety.{0,5}check/i;
-
-    const finish = () => {
-      if (done) return;
-      done = true;
-      if (idleTimer) clearTimeout(idleTimer);
-      removeDataFn?.();
-      removeExitFn?.();
-    };
-
-    const scheduleChat = () => {
-      if (idleTimer) clearTimeout(idleTimer);
-      idleTimer = setTimeout(() => {
-        setChatFocusTick((t) => t + 1);
-        finish();
-      }, 1500);
-    };
-
-    removeDataFn = window.pty.onData((data) => {
-      if (done) return;
-      const plain = data.replace(ANSI_RE, '');
-
-      if (TRUST_RE.test(plain)) {
-        // Trust dialog is on screen — suppress idle timer, keep terminal focused
-        trustDialogActive = true;
-        if (idleTimer) clearTimeout(idleTimer);
-        return;
-      }
-
-      if (trustDialogActive) {
-        // New data after trust dialog → user made a selection, CLI is loading
-        trustDialogActive = false;
-      }
-
-      scheduleChat();
-    });
-
-    // PTY exited (e.g. user declined trust): keep terminal focused, stop watching
-    removeExitFn = window.pty.onExit(() => {
-      setTermFocusTick((t) => t + 1);
-      finish();
-    });
-
-    return finish;
-  }, []);
-
   return (
     <div style={styles.root}>
       {/* LNB */}
@@ -92,9 +29,9 @@ export function MainLayout({ selectedCli, onChangeCli }: Props) {
       {/* Center */}
       <div style={styles.center}>
         <div style={styles.terminal}>
-          <Terminal autoSpawn={{}} initInput={selectedCli} focusTick={termFocusTick} />
+          <Terminal autoSpawn={{}} initInput={selectedCli} />
         </div>
-        <ChatInput focusTick={chatFocusTick} />
+        <ChatInput />
       </div>
 
       {/* Right panel */}

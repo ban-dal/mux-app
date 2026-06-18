@@ -1,18 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 
-interface Props {
-  /** Increment to imperatively request focus */
-  focusTick?: number;
-}
-
-export function ChatInput({ focusTick }: Props) {
+export function ChatInput() {
   const [value, setValue] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    if (focusTick && focusTick > 0) textareaRef.current?.focus();
-  }, [focusTick]);
 
   const send = () => {
     const text = value.trim();
