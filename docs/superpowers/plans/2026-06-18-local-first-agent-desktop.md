@@ -2,394 +2,377 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a personal local-first desktop app that combines cmux-style multi-agent observability with Codex/Claude Desktop-style GUI workflows.
+**Goal:** Build a self-hosted Claude Code Desktop / Codex Desktop — a personal desktop app that lets you run AI coding CLI agents (claude, codex, gemini) through a GUI, with a terminal for execution, structured chat UI, chat history, file/git panel, tests, and multi-agent observability.
 
-**Architecture:** Start with an Electron/React/TypeScript shell, a local SQLite event store, a runner abstraction, and a terminal bridge that first supports a stub terminal adapter before Ghostty-specific integration is proven. The app treats terminal output as the live execution surface and GUI state as structured task, approval, telemetry, diff, and completion-record management.
+**Architecture:**
+- Electron main process spawns CLI agents via node-pty (PTY).
+- Renderer: xterm.js (top half, live terminal output) + React chat UI (bottom half, structured input/history).
+- SQLite stores chat history, workspace metadata, telemetry events.
+- Right panel: file tree, git diff, embedded browser (BrowserView), plans/tasks, multi-agent dashboard.
 
-**Tech Stack:** Electron, React, TypeScript, SQLite, Node child_process, Git CLI, Ghostty integration spike, Markdown completion records.
+**Tech Stack:** Electron, React, TypeScript, node-pty, xterm.js, SQLite.
+
+---
+
+## Layout Overview
+
+```
+┌──────────────┬──────────────────────────────┬──────────────────┐
+│   LNB        │   Terminal (xterm.js, top)   │  Right Panel     │
+│              │──────────────────────────────│  ─ File tree     │
+│  Project A   │   Chat Area (React, bottom)  │  ─ Git changes   │
+│  └ conv 1    │   [model][effort][mode][📎]  │  ─ Browser       │
+│  └ conv 2    │   [─────────────── send ──]  │  ─ Plans/tasks   │
+│  Project B   │                              │  ─ Multi-agent   │
+│              │                              │                  │
+├──────────────┤                              │                  │
+│ Usage │ ⚙️   │                              │                  │
+└──────────────┴──────────────────────────────┴──────────────────┘
+```
+
+Sub-agent terminal split (when sub-agents appear):
+```
+│   Main Terminal (left, fixed)  │  Sub-agent 1  │  Sub-agent 2  │
+```
 
 ---
 
 ## Planning Rules
 
-- Each MVP must produce a usable vertical slice.
+- Each MVP must prove something previously uncertain — do not build what is already known to work.
+- MVP 0 must prove the hardest technical risk: node-pty + xterm.js on Windows Electron.
 - Every MVP ends with a completion record using `docs/templates/mvp-completion-record.md`.
-- Do not start the next MVP until the current MVP has passing verification, a written completion record, and a short "next start point".
-- Prefer local files and SQLite over cloud services until MVP 7.
+- Do not start the next MVP until the current MVP has passing verification, a written completion record, and a "다음 시작 지점".
+- Prefer local SQLite over cloud until multi-agent dashboard.
 - Add provider abstraction only when two real runners need it.
-- Add team/server concepts only after local single-user workflows are stable.
 
-## Target File Structure
+---
 
-The first implementation pass should create this shape.
-
-- `package.json`: scripts, dependencies, app metadata.
-- `src/main/`: Electron main process, runner process management, local filesystem access.
-- `src/main/app/`: app boot, window creation, IPC registration.
-- `src/main/db/`: SQLite schema, migrations, repositories.
-- `src/main/runner/`: runner adapters for stub, shell command, Codex, Claude.
-- `src/main/terminal/`: terminal bridge interfaces and Ghostty spike implementation.
-- `src/main/telemetry/`: event normalization, file touch detection, process event capture.
-- `src/preload/`: safe IPC bridge exposed to renderer.
-- `src/renderer/`: React GUI.
-- `src/renderer/features/tasks/`: task board, task detail, task creation.
-- `src/renderer/features/terminal/`: terminal session panels and telemetry tabs.
-- `src/renderer/features/approvals/`: approval queue and decision UI.
-- `src/renderer/features/records/`: completion record viewer/editor.
-- `src/shared/`: shared types and schemas.
-- `tests/unit/`: unit tests for domain logic and adapters.
-- `tests/integration/`: process runner, db, event store tests.
-- `docs/adr/`: architecture decision records.
-- `docs/mvp-records/`: completed MVP records.
-- `docs/templates/`: reusable templates.
-
-## MVP 0: Feasibility Spine
+## MVP 0: PTY Terminal Spike
 
 ### Outcome
 
-The app can create a local task, run a dummy command, display or link a terminal session, persist events, and write a completion record.
+An xterm.js terminal inside the Electron app runs a real process via node-pty on Windows. This is the single highest-risk technical dependency for the entire product.
+
+### Why First
+
+Everything else — chat history, file panel, git diff, multi-agent — is well-understood UI work. The only unknown is whether node-pty can be native-rebuilt for this Electron version on Windows and whether PTY ↔ IPC ↔ xterm.js streams reliably. If this fails, the product concept fails.
 
 ### Scope
 
-- Electron app skeleton.
-- Local SQLite event store.
-- Task create/list/detail GUI.
-- Stub runner that executes a harmless command.
-- Terminal bridge interface with stub implementation.
-- Completion record template wired into docs.
+- Install node-pty, xterm.js.
+- electron-rebuild configuration for node-pty native module.
+- IPC channels: `pty:data` (main→renderer), `pty:input` (renderer→main), `pty:resize` (renderer→main), `pty:exit` (main→renderer).
+- Minimal terminal panel in renderer using xterm.js (FitAddon for resize).
+- Hardcoded "Open Terminal" button that spawns cmd.exe via node-pty.
+- PTY process exit detection and UI state update.
 
 ### Excluded
 
-- Real Codex/Claude execution.
-- Real Ghostty embedding.
-- Multi-agent orchestration.
-- Diff UI.
-- Git write actions.
+- Task management, SQLite, workspaces, CLI selection, chat area, LNB.
 
 ### Tasks
 
-- [ ] Create Electron + React + TypeScript project skeleton.
-- [ ] Add `Task`, `AgentSession`, `TerminalSession`, `TelemetryEvent`, `CompletionRecord` shared types.
-- [ ] Create SQLite schema for workspaces, tasks, agent_sessions, terminal_sessions, telemetry_events, completion_records.
-- [ ] Implement repository functions for task create/list/update.
-- [ ] Implement append-only telemetry event writer.
-- [ ] Build task board with Draft, Running, Completed, Failed columns.
-- [ ] Build task detail view showing prompt, status, event timeline, and terminal placeholder.
-- [ ] Implement `StubRunner` that runs a deterministic local command.
-- [ ] Connect `Run Task` button to runner through IPC.
-- [ ] Persist process start, stdout line, stderr line, exit code, and duration events.
-- [ ] Create terminal bridge interface with `openSession`, `attachToTask`, `disposeSession`.
-- [ ] Implement stub terminal panel that displays captured stdout/stderr.
-- [ ] Add `docs/mvp-records/MVP-00-feasibility-spine.md` using the template.
-- [ ] Verify app can run end-to-end from new task to completion record.
+- [ ] Install `node-pty`, `xterm`, `@xterm/addon-fit` packages.
+- [ ] Configure electron-rebuild (or `@electron-forge/plugin-auto-unpack-natives`) for node-pty.
+- [ ] Verify `pnpm build` passes with node-pty native module included.
+- [ ] Add IPC channels in main and expose via contextBridge in preload.
+- [ ] Implement PTY manager in main: spawn shell, pipe output to renderer, receive input.
+- [ ] Add xterm.js Terminal component in renderer with FitAddon.
+- [ ] Wire xterm `onData` → `pty:input` IPC.
+- [ ] Wire `pty:data` IPC → xterm `write`.
+- [ ] Wire xterm `onResize` → `pty:resize` IPC.
+- [ ] Add "Open Terminal" button; handle `pty:exit` to mark terminal closed.
 
 ### Verification
 
-- [ ] `pnpm lint` passes.
+- [ ] `pnpm build` passes with node-pty in native modules.
 - [ ] `pnpm typecheck` passes.
-- [ ] Unit tests for repositories pass.
-- [ ] Integration test verifies task -> runner -> events -> completion record.
-- [ ] Manual smoke test creates one task and observes events in GUI.
+- [ ] `pnpm lint` passes.
+- [ ] Manual: open terminal panel, type `dir`, see output.
+- [ ] Manual: type `exit`, terminal panel shows as closed.
+- [ ] Manual: type `claude --version` or `codex --version`, see output.
 
 ### Completion Record Must Include
 
-- Chosen app runtime and why.
-- Actual SQLite schema.
-- Terminal bridge limitation.
-- First known risk around Ghostty.
-- Exact command used for the stub runner.
+- node-pty version + Electron version verified.
+- Exact electron-rebuild command/config.
+- Whether ConPTY (Windows) worked without issues.
+- xterm.js addons used.
+- IPC channel names and data format.
 - Next start point for MVP 1.
 
-## MVP 1: Single Main Agent
+---
+
+## MVP 1: CLI Selection + Basic Shell Launch
 
 ### Outcome
 
-The app can start one real main agent command in a workspace and preserve its execution history.
+First-run screen shows CLI selection (claude / codex / gemini) with basic session info. On subsequent launches, the previously selected CLI opens immediately in the terminal. Chat input at the bottom sends text to PTY stdin.
 
 ### Scope
 
-- Workspace registration.
-- Runner settings for Codex and Claude command templates.
-- Main agent execution.
-- Process cancellation.
-- File touch detection through Git status snapshots.
-- Basic approval pause state when runner requests escalation or manual input.
+- First-run CLI selection screen.
+- Persist selection in SQLite (or app config).
+- Main 3-column layout: LNB placeholder | center (terminal top + chat bottom) | right placeholder.
+- Launch selected CLI in PTY on app open.
+- Chat input sends to PTY stdin.
+- Detect CLI availability (check PATH for `claude`, `codex`, `gemini`).
 
 ### Tasks
 
-- [ ] Add workspace registration screen with local path, label, default runner.
-- [ ] Persist workspace settings in SQLite.
-- [ ] Add runner config screen for executable path, args template, environment variables, and default cwd.
-- [ ] Implement `ShellRunner` using Node child_process.
-- [ ] Implement `CodexRunner` as a configured shell runner profile.
-- [ ] Implement `ClaudeRunner` as a configured shell runner profile.
-- [ ] Add process cancellation and timeout handling.
-- [ ] Capture stdout/stderr as telemetry events.
-- [ ] Capture process exit code and signal.
-- [ ] Snapshot Git status before and after execution.
-- [ ] Store changed file paths in telemetry.
-- [ ] Show changed files in task detail.
-- [ ] Add manual completion record editor prefilled from events.
-- [ ] Verify one real agent can be launched against a disposable workspace.
+- [ ] Create SQLite db and `app_config` table (selected_cli, version, created_at).
+- [ ] Build CLI selection screen: show claude / codex / gemini options with availability status.
+- [ ] On selection, persist choice and navigate to main view.
+- [ ] Build 3-column main layout (LNB 240px | center flex | right 320px).
+- [ ] Center top: xterm.js terminal panel (reuse MVP 0 PTY manager).
+- [ ] Center bottom: minimal chat input bar (textarea + send button).
+- [ ] On app launch with saved CLI: spawn that CLI via PTY.
+- [ ] Send button sends chat input text to PTY stdin.
+- [ ] "Change CLI" option in settings placeholder.
 
 ### Verification
 
-- [ ] Unit tests for command template rendering.
-- [ ] Unit tests for process lifecycle state transitions.
-- [ ] Integration test for successful command.
-- [ ] Integration test for failed command.
-- [ ] Manual smoke test with one Codex or Claude command.
+- [ ] First run: selection screen appears.
+- [ ] Select claude: main view opens, terminal shows `claude` starting.
+- [ ] Type message in chat input, press send: message forwarded to PTY.
+- [ ] Relaunch app: previously selected CLI launches automatically.
 
 ### Completion Record Must Include
 
-- Runner command used.
-- Workspace path.
-- Files touched.
-- Whether cancellation worked.
-- Whether terminal session stayed readable after exit.
+- CLI detection strategy (PATH check).
+- PTY spawn command for each CLI.
+- Config persistence location.
 - Next start point for MVP 2.
 
-## MVP 2: Subagent Telemetry
+---
+
+## MVP 2: LNB — Chat History + Project Grouping
 
 ### Outcome
 
-Main and subagent sessions are represented separately, with per-agent status, logs, terminal linkage, and failure handling.
+Left navigation shows chat conversations grouped by workspace (directory), stored for 30 days in SQLite. Users can start new conversations, switch between them, and see history.
 
 ### Scope
 
-- Agent session hierarchy.
-- Main/subagent role distinction.
-- Subagent event grouping.
-- Parallel process lifecycle display.
-- Individual retry for failed subagent-like commands.
+- Workspace detection from CLI cwd or user-configured paths.
+- Conversation sessions: create, list, select, delete.
+- SQLite schema: `workspaces`, `conversations`, `messages`.
+- LNB: project sections with conversation list, new conversation button.
+- Footer: usage placeholder + settings button.
+- 30-day retention policy (delete older entries on startup).
 
 ### Tasks
 
-- [ ] Extend schema with `parent_agent_session_id`.
-- [ ] Add agent role enum: `main`, `subagent`, `system`, `tool`.
-- [ ] Add agent session list to task detail.
-- [ ] Add event timeline filters by agent.
-- [ ] Implement subagent detection strategy for supported runner output.
-- [ ] If detection is not reliable, add explicit subagent launch API first.
-- [ ] Add terminal/log tab per agent session.
-- [ ] Add status rollup from agent sessions to task.
-- [ ] Implement retry for failed child agent session.
-- [ ] Persist retry relationship between old and new session.
-- [ ] Add completion record section for subagent outcomes.
+- [ ] SQLite schema: `workspaces (id, path, label, created_at)`, `conversations (id, workspace_id, title, started_at, last_active_at)`, `messages (id, conversation_id, role, content, created_at)`.
+- [ ] Detect workspace from CLI cwd; allow manual workspace add.
+- [ ] LNB component: workspace sections, conversation list items, new chat button.
+- [ ] Create new conversation → opens fresh PTY session.
+- [ ] Select existing conversation → restore terminal session or show history.
+- [ ] Store messages (user input + CLI output chunks) in SQLite.
+- [ ] 30-day cleanup on app startup.
+- [ ] Footer: empty session usage area + settings icon.
+- [ ] LNB collapse/expand toggle.
 
 ### Verification
 
-- [ ] Unit tests for status rollup.
-- [ ] Unit tests for parent/child event queries.
-- [ ] Integration test with one main and two child sessions.
-- [ ] Manual smoke test shows separate agent logs.
+- [ ] Start conversation, send messages, restart app: history visible in LNB.
+- [ ] Multiple workspaces appear as separate groups.
+- [ ] 30-day cleanup: insert old record manually, verify it is deleted on startup.
+- [ ] New conversation creates a fresh session.
 
 ### Completion Record Must Include
 
-- How subagents were detected or launched.
-- Failure/retry behavior.
-- Event schema changes.
-- Known gaps in telemetry fidelity.
+- Workspace detection method.
+- Message storage format (full text vs chunks).
+- Conversation title strategy (auto-generated or first message).
 - Next start point for MVP 3.
 
-## MVP 3: cmux-Style Task Board
+---
+
+## MVP 3: Right Panel — Files & Git
 
 ### Outcome
 
-The app supports multiple concurrent tasks, status filtering, task comparison, and fast recovery from blocked or failed work.
+Right panel shows file tree for the current workspace, git diff of changed files, current branch, and commit/push actions.
 
 ### Scope
 
-- Multi-task board.
-- Concurrent runner management.
-- Queue and resource limits.
-- Task comparison view.
-- Blocked/failed recovery workflow.
+- File tree viewer (workspace root, collapsible directories).
+- Git status panel (changed files with +/- indicators).
+- Git diff viewer for selected file.
+- Current branch display.
+- Commit message input + commit button.
+- Push button.
+- Right panel tabs: Files | Changes.
 
 ### Tasks
 
-- [ ] Add task filters by status, workspace, runner, date, and text.
-- [ ] Add task queue with max concurrent runs.
-- [ ] Add per-workspace concurrency limit.
-- [ ] Add board cards showing status, duration, last event, changed files count, and approval state.
-- [ ] Add task compare view for prompt, status, changed files, tests, and completion summary.
-- [ ] Add failed task recovery actions: retry, duplicate task, archive, mark blocked.
-- [ ] Add blocked task note field.
-- [ ] Add task archive view.
-- [ ] Add global running task indicator.
-- [ ] Add event retention policy setting.
+- [ ] Right panel tab structure: Files | Changes | (placeholder tabs for later).
+- [ ] File tree: read workspace directory, display tree with icons.
+- [ ] File tree: click file → open in system editor (shell open).
+- [ ] Git status: run `git status --porcelain` in workspace, parse output.
+- [ ] Changes tab: list modified/added/deleted files with status indicators.
+- [ ] Click changed file → show inline diff (run `git diff <file>`, render as colored lines).
+- [ ] Current branch: run `git rev-parse --abbrev-ref HEAD`, display in Changes header.
+- [ ] Commit panel: textarea for commit message + commit button (`git add -A && git commit`).
+- [ ] Push button (`git push`), show result.
+- [ ] Dashboard popover trigger in chat area: show branch, diff file count, commit status.
 
 ### Verification
 
-- [ ] Unit tests for queue scheduling.
-- [ ] Unit tests for task filters.
-- [ ] Integration test for concurrent tasks.
-- [ ] Manual smoke test with at least three tasks.
+- [ ] Open workspace with git changes: Changes tab shows modified files.
+- [ ] Click changed file: diff displayed inline.
+- [ ] Commit: git log shows new commit.
+- [ ] Push: success/error message shown.
 
 ### Completion Record Must Include
 
-- Concurrency defaults.
-- Recovery workflow tested.
-- Board states that are still awkward.
+- Git command execution method (child_process vs node-git).
+- Diff rendering approach.
+- File tree performance on large directories.
 - Next start point for MVP 4.
 
-## MVP 4: Desktop Workflow GUI
+---
+
+## MVP 4: Session Usage + Chat UI Polish
 
 ### Outcome
 
-The non-terminal parts of the coding workflow become GUI-native: diff, approvals, specs, plans, logs, records, and settings.
+Session usage (5h / 1-week) is displayed in the footer and above the chat input. Chat area shows structured message history with model, effort, and mode selectors.
 
 ### Scope
 
-- Diff viewer.
-- Approval queue.
-- Plan/spec/log Markdown viewer.
-- Completion record editor.
-- Search and resume.
-- Settings UI.
+- Read CLI auth tokens (from `~/.claude/` or equivalent) to call usage API.
+- Parse and display usage: tokens used, cost estimate, reset time.
+- Chat area: styled message bubbles (user + assistant), scroll history.
+- Chat toolbar: model selector, effort level (low/med/high), work mode, file attachment.
+- Session usage indicator above chat input.
 
 ### Tasks
 
-- [ ] Add Git diff repository function for selected workspace.
-- [ ] Add file list and diff view in task detail.
-- [ ] Add approval request schema with action, risk, command, cwd, created_at, resolved_at.
-- [ ] Add approval queue screen.
-- [ ] Add approve/reject decision flow.
-- [ ] Add Markdown viewer for docs and completion records.
-- [ ] Add completion record editor with save-to-file.
-- [ ] Add global search over task title, prompt, completion record, changed files, and event text.
-- [ ] Add resume task flow that creates a new task from a previous task context.
-- [ ] Add settings screen for runners, workspaces, policies, and data location.
+- [ ] Detect CLI credential file location for each CLI type.
+- [ ] Call available usage API or parse usage from CLI config/logs.
+- [ ] Store usage snapshots in SQLite; update on each conversation.
+- [ ] Footer: display current usage vs limit with progress bar.
+- [ ] Chat area: render message history as styled bubbles.
+- [ ] Chat toolbar: model selector dropdown, effort selector, mode selector.
+- [ ] File attachment button: pick file, include path in message.
+- [ ] Usage panel above chat input: 5h usage / 1-week usage.
+- [ ] CLI selection screen: show usage per CLI on selection cards.
 
 ### Verification
 
-- [ ] Unit tests for approval state machine.
-- [ ] Unit tests for search indexing.
-- [ ] Integration test for approval persistence.
-- [ ] Manual smoke test for diff and completion record editing.
+- [ ] Footer shows usage after sending at least one message.
+- [ ] Chat history renders correctly with user/assistant distinction.
+- [ ] Model and effort selectors visibly affect the CLI command arguments.
 
 ### Completion Record Must Include
 
-- Approval actions supported.
-- Diff implementation limitations.
-- Search fields indexed.
-- Resume workflow quality.
+- Usage API or file parsing method per CLI.
+- What data is available vs estimated.
+- Auth token read safety considerations.
 - Next start point for MVP 5.
 
-## MVP 5: Provider and Connector Layer
+---
+
+## MVP 5: Sub-Agent Terminal Grid
 
 ### Outcome
 
-The app can add new runner/provider/connector capabilities without rewriting core task orchestration.
+When sub-agents are spawned (either detected from main CLI stdout or app-managed), additional terminal panels appear to the right of the main terminal in a grid layout.
 
 ### Scope
 
-- Stable runner adapter.
-- Connector registry.
-- Read/write action policy.
-- GitHub read surfaces first.
-- Write actions behind approval.
+- Sub-agent detection strategy: strong stdout pattern matching against known Claude Code / Codex sub-agent output markers.
+- Alternatively (preferred if feasible): app spawns sub-agents directly via its own API calls — no effect on main model token usage, no PTY overhead.
+- Terminal grid: main terminal fixed on left, sub-agent terminals in right columns (max 2 visible, scrollable).
+- Per-session: label, status indicator (running/done/failed), kill button.
+- Sub-agent list in chat area dashboard popover.
 
 ### Tasks
 
-- [ ] Define runner adapter contract.
-- [ ] Migrate Codex/Claude/Shell runners to adapter contract.
-- [ ] Define connector action contract.
-- [ ] Add connector registry in main process.
-- [ ] Add connector capability list in settings.
-- [ ] Add GitHub read-only connector spike for PR metadata.
-- [ ] Add connector events to telemetry timeline.
-- [ ] Add write action approval wrapper.
-- [ ] Add connector audit log.
-- [ ] Document how to add a new runner and connector.
+- [ ] Define sub-agent detection: parse stdout for known patterns OR implement app-managed spawn API.
+- [ ] If stdout detection: implement pattern matcher, test against real Claude Code output.
+- [ ] If app-managed: define sub-agent spawn IPC, spawn new PTY session per sub-agent.
+- [ ] Terminal grid layout: CSS grid, main 1fr left + sub-agents right columns.
+- [ ] Sub-agent panel header: label + status dot + kill (×) button.
+- [ ] Sub-agent list in dashboard popover.
+- [ ] Multi-agent tab in right panel (placeholder for MVP 6 dashboard).
 
 ### Verification
 
-- [ ] Contract tests for runners.
-- [ ] Contract tests for connector read action.
-- [ ] Approval test for connector write action.
-- [ ] Manual smoke test for GitHub read data if credentials are available.
+- [ ] Trigger a sub-agent (manually or via CLI): second terminal appears.
+- [ ] Kill sub-agent: panel closes.
+- [ ] Multiple sub-agents: grid extends correctly.
 
 ### Completion Record Must Include
 
-- Adapter boundaries.
-- First connector limitations.
-- Security and approval implications.
+- Sub-agent detection method chosen and its reliability.
+- Whether app-managed spawn affected main model token usage.
+- Grid performance with 2+ sessions.
 - Next start point for MVP 6.
 
-## MVP 6: Long-Term Memory and Replay
+---
+
+## MVP 6: Right Panel — Browser + Plans + Multi-Agent Dashboard
 
 ### Outcome
 
-The app becomes useful over months of work: records are searchable, reusable, and replayable.
+Right panel is fully featured: embedded browser for live test observation, plan/task/skill viewer, and multi-agent UI dashboard inspired by sonol-multi-agent.
 
 ### Scope
 
-- Full-text search.
-- Task templates.
-- Completion record reuse.
-- Replay in a new branch/workspace.
-- Failure pattern notes.
+- Right panel tabs: Files | Changes | Browser | Plans | Agents.
+- Embedded browser (Electron BrowserView or `<webview>`): display agent-controlled browser session.
+- Plans tab: display plan/task Markdown files from workspace docs.
+- Skills/tools tab: log of tools used in current session.
+- Agents tab: multi-agent dashboard — status, token usage, timeline per agent.
+  - Reference: https://github.com/volition79/sonol-multi-agent
 
 ### Tasks
 
-- [ ] Add full-text index for tasks, events, files, records.
-- [ ] Add saved task templates.
-- [ ] Add "create task from completion record".
-- [ ] Add "replay task" workflow with branch/workspace selection.
-- [ ] Add failure pattern field to completion records.
-- [ ] Add reusable decisions/ADR links.
-- [ ] Add export bundle for one task with events and records.
-- [ ] Add import bundle for archived task context.
+- [ ] Right panel tab system: Files | Changes | Browser | Plans | Agents.
+- [ ] Browser tab: embed Electron BrowserView, navigate to agent browser URL (from `agent-browser:dashboard` or localhost dev server).
+- [ ] BrowserView resize to fit right panel.
+- [ ] Plans tab: scan workspace `docs/` for Markdown files, display tree + viewer.
+- [ ] Skills/tools tab: parse telemetry events for tool_call type, display timeline.
+- [ ] Agents tab: agent session list with status, start time, token count, event count.
+- [ ] Agent timeline: collapsible event list per agent.
+- [ ] Agent detail: last stdout line, exit code, duration.
 
 ### Verification
 
-- [ ] Unit tests for search ranking.
-- [ ] Integration test for export/import.
-- [ ] Manual smoke test replaying an old task into a new workspace.
+- [ ] Browser tab: navigate to localhost:3000 (if running), page renders inside right panel.
+- [ ] Plans tab: Markdown files from workspace docs appear.
+- [ ] Agents tab: all spawned agents visible with status.
 
 ### Completion Record Must Include
 
-- Replay safety rules.
-- Export/import format.
-- Search quality issues.
+- BrowserView vs webview decision and tradeoffs.
+- Plans discovery strategy.
+- Multi-agent dashboard data sources.
+- Remaining right panel gaps.
 - Next start point for MVP 7.
 
-## MVP 7: Team-Ready Evolution
+---
+
+## MVP 7: Stability + Polish
 
 ### Outcome
 
-The local-first app keeps working for one person while its artifacts and schemas become ready for team sharing.
+The app is reliable enough for daily use: crash recovery, keyboard shortcuts, notification on task completion, and onboarding flow.
 
 ### Scope
 
-- Shareable exports.
-- Multiuser-ready schema fields.
-- Optional remote runner experiment.
-- Team handoff docs.
+- PTY session recovery on renderer crash.
+- App-level error boundaries.
+- Keyboard shortcuts (new chat, toggle LNB, toggle right panel, send).
+- OS notification on agent task completion.
+- Onboarding: first-run guide for CLI setup.
+- Export conversation as Markdown.
 
-### Tasks
-
-- [ ] Add actor fields to approval and telemetry schema without changing single-user UX.
-- [ ] Add shareable HTML/Markdown task report export.
-- [ ] Add redaction rules for secrets and local paths.
-- [ ] Add workspace policy export/import.
-- [ ] Add experimental remote runner interface behind a feature flag.
-- [ ] Add team handoff guide.
-- [ ] Add migration notes from local-only to shared artifacts.
-
-### Verification
-
-- [ ] Unit tests for redaction.
-- [ ] Integration test for report export.
-- [ ] Manual review of exported task report.
-
-### Completion Record Must Include
-
-- What became team-ready.
-- What is still local-only.
-- Remote runner risks.
-- Recommended next product direction.
+---
 
 ## Cross-MVP Completion Gate
 
