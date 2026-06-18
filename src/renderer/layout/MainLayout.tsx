@@ -23,7 +23,8 @@ export function MainLayout({ selectedCli, onChangeCli }: Props) {
     let removeDataFn: (() => void) | null = null;
     let removeExitFn: (() => void) | null = null;
 
-    const ANSI_RE = /\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b[()][AB012]/g;
+    // eslint-disable-next-line no-control-regex
+    const ANSI_RE = /[[0-9;]*[a-zA-Z]|][^]*|[()][AB012]/g;
     const TRUST_RE = /trust.*folder|safety.{0,5}check/i;
 
     const finish = () => {
