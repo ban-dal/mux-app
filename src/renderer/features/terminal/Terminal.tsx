@@ -2,16 +2,16 @@ import { useEffect, useRef, useState } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
-
-declare global {
-  interface Window {
-    pty: import('../../preload').PtyApi;
-  }
-}
+import type { SpawnOptions } from '../../../main/pty/pty-manager';
 
 type Status = 'idle' | 'running' | 'exited';
 
-export function Terminal() {
+interface Props {
+  /** If provided, spawn is triggered automatically on mount */
+  autoSpawn?: SpawnOptions;
+}
+
+export function Terminal({ autoSpawn }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -51,10 +51,13 @@ export function Terminal() {
 
     const observer = new ResizeObserver(() => {
       fitAddon.fit();
-      const { cols, rows } = term;
-      window.pty.resize(cols, rows);
+      window.pty.resize(term.cols, term.rows);
     });
     observer.observe(containerRef.current);
+
+    if (autoSpawn) {
+      void doSpawn(autoSpawn);
+    }
 
     return () => {
       removeData();
@@ -65,13 +68,15 @@ export function Terminal() {
       termRef.current = null;
       fitAddonRef.current = null;
     };
+    // autoSpawn is intentionally excluded — only run on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleSpawn = async () => {
+  const doSpawn = async (opts?: SpawnOptions) => {
     setStatus('running');
     setExitInfo(null);
     termRef.current?.clear();
-    await window.pty.spawn();
+    await window.pty.spawn(opts);
     if (fitAddonRef.current && termRef.current) {
       fitAddonRef.current.fit();
       window.pty.resize(termRef.current.cols, termRef.current.rows);
@@ -80,36 +85,19 @@ export function Terminal() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#1e1e1e' }}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          padding: '8px 12px',
-          background: '#2d2d2d',
-          borderBottom: '1px solid #3e3e3e',
-          flexShrink: 0,
-        }}
-      >
-        <span style={{ color: '#d4d4d4', fontSize: 13, fontWeight: 500 }}>Terminal</span>
+      <div style={styles.header}>
+        <span style={styles.headerTitle}>Terminal</span>
         <StatusBadge status={status} exitCode={exitInfo?.exitCode} />
-        <div style={{ marginLeft: 'auto' }}>
-          <button
-            onClick={handleSpawn}
-            disabled={status === 'running'}
-            style={{
-              padding: '4px 12px',
-              fontSize: 12,
-              background: status === 'running' ? '#3e3e3e' : '#0e639c',
-              color: status === 'running' ? '#888' : '#fff',
-              border: 'none',
-              borderRadius: 4,
-              cursor: status === 'running' ? 'default' : 'pointer',
-            }}
-          >
-            {status === 'idle' ? 'Open Terminal' : status === 'running' ? 'Running…' : 'Reopen'}
-          </button>
-        </div>
+        <button
+          onClick={() => void doSpawn(autoSpawn)}
+          disabled={status === 'running'}
+          style={{
+            ...styles.spawnBtn,
+            ...(status === 'running' ? styles.spawnBtnDisabled : {}),
+          }}
+        >
+          {status === 'idle' ? 'Open' : status === 'running' ? 'Running…' : 'Reopen'}
+        </button>
       </div>
       <div ref={containerRef} style={{ flex: 1, overflow: 'hidden', padding: '4px 0' }} />
     </div>
@@ -117,36 +105,46 @@ export function Terminal() {
 }
 
 function StatusBadge({ status, exitCode }: { status: Status; exitCode?: number }) {
-  const colors: Record<Status, string> = {
-    idle: '#888',
-    running: '#4caf50',
-    exited: exitCode === 0 ? '#888' : '#f44336',
-  };
-  const labels: Record<Status, string> = {
-    idle: 'idle',
-    running: 'running',
-    exited: exitCode === 0 ? `exited (0)` : `exited (${exitCode})`,
-  };
+  const color =
+    status === 'running' ? '#4caf50' : status === 'exited' && exitCode !== 0 ? '#f44336' : '#888';
+  const label =
+    status === 'idle' ? 'idle' : status === 'running' ? 'running' : `exited (${exitCode ?? 0})`;
   return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 5,
-        fontSize: 11,
-        color: colors[status],
-      }}
-    >
-      <span
-        style={{
-          width: 6,
-          height: 6,
-          borderRadius: '50%',
-          background: colors[status],
-          display: 'inline-block',
-        }}
-      />
-      {labels[status]}
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color }}>
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: color, display: 'inline-block' }} />
+      {label}
     </span>
   );
 }
+
+const styles: Record<string, React.CSSProperties> = {
+  header: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    padding: '8px 12px',
+    background: '#2d2d2d',
+    borderBottom: '1px solid #3e3e3e',
+    flexShrink: 0,
+  },
+  headerTitle: {
+    color: '#d4d4d4',
+    fontSize: 13,
+    fontWeight: 500,
+    flex: 1,
+  },
+  spawnBtn: {
+    padding: '4px 10px',
+    fontSize: 12,
+    background: '#0e639c',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 4,
+    cursor: 'pointer',
+  },
+  spawnBtnDisabled: {
+    background: '#3e3e3e',
+    color: '#888',
+    cursor: 'default',
+  },
+};
