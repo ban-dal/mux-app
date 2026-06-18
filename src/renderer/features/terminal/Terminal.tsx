@@ -9,14 +9,17 @@ type Status = 'idle' | 'running' | 'exited';
 interface Props {
   /** If provided, spawn is triggered automatically on mount */
   autoSpawn?: SpawnOptions;
+  /** If provided, sent to stdin immediately after the PTY spawns (e.g. 'claude') */
+  initInput?: string;
 }
 
-export function Terminal({ autoSpawn }: Props) {
+export function Terminal({ autoSpawn, initInput }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const [status, setStatus] = useState<Status>('idle');
   const [exitInfo, setExitInfo] = useState<{ exitCode: number; signal: number } | null>(null);
+  const [isFocused, setIsFocused] = useState(false);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -40,6 +43,12 @@ export function Terminal({ autoSpawn }: Props) {
     termRef.current = term;
     fitAddonRef.current = fitAddon;
 
+    // xterm.js routes keyboard input through an internal hidden textarea
+    const onTermFocus = () => setIsFocused(true);
+    const onTermBlur = () => setIsFocused(false);
+    term.textarea?.addEventListener('focus', onTermFocus);
+    term.textarea?.addEventListener('blur', onTermBlur);
+
     const removeData = window.pty.onData((data) => term.write(data));
     const removeExit = window.pty.onExit((info) => {
       setStatus('exited');
@@ -56,10 +65,12 @@ export function Terminal({ autoSpawn }: Props) {
     observer.observe(containerRef.current);
 
     if (autoSpawn) {
-      void doSpawn(autoSpawn);
+      void doSpawn(autoSpawn, initInput);
     }
 
     return () => {
+      term.textarea?.removeEventListener('focus', onTermFocus);
+      term.textarea?.removeEventListener('blur', onTermBlur);
       removeData();
       removeExit();
       onInput.dispose();
@@ -72,7 +83,7 @@ export function Terminal({ autoSpawn }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const doSpawn = async (opts?: SpawnOptions) => {
+  const doSpawn = async (opts?: SpawnOptions, afterInput?: string) => {
     setStatus('running');
     setExitInfo(null);
     termRef.current?.clear();
@@ -81,15 +92,31 @@ export function Terminal({ autoSpawn }: Props) {
       fitAddonRef.current.fit();
       window.pty.resize(termRef.current.cols, termRef.current.rows);
     }
+    if (afterInput) {
+      window.pty.sendInput(afterInput + '\r');
+    }
   };
 
+  const focusTerminal = () => termRef.current?.focus();
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#1e1e1e' }}>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        background: '#1e1e1e',
+        outline: isFocused ? '2px solid #3b82f6' : '2px solid transparent',
+        outlineOffset: '-2px',
+        borderRadius: 2,
+      }}
+      onClick={focusTerminal}
+    >
       <div style={styles.header}>
         <span style={styles.headerTitle}>Terminal</span>
         <StatusBadge status={status} exitCode={exitInfo?.exitCode} />
         <button
-          onClick={() => void doSpawn(autoSpawn)}
+          onClick={() => void doSpawn(autoSpawn, initInput)}
           disabled={status === 'running'}
           style={{
             ...styles.spawnBtn,
@@ -99,7 +126,7 @@ export function Terminal({ autoSpawn }: Props) {
           {status === 'idle' ? 'Open' : status === 'running' ? 'Running…' : 'Reopen'}
         </button>
       </div>
-      <div ref={containerRef} style={{ flex: 1, overflow: 'hidden', padding: '4px 0' }} />
+      <div ref={containerRef} style={{ flex: 1, overflow: 'hidden', padding: '4px 0', cursor: 'text' }} />
     </div>
   );
 }

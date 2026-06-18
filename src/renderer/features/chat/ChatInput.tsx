@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 
 export function ChatInput() {
   const [value, setValue] = useState('');
+  const [isFocused, setIsFocused] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const send = () => {
@@ -20,7 +21,14 @@ export function ChatInput() {
   };
 
   return (
-    <div style={styles.root}>
+    <div
+      style={{
+        ...styles.root,
+        outline: isFocused ? '2px solid #3b82f6' : '2px solid transparent',
+        outlineOffset: '-2px',
+      }}
+      onClick={(e) => e.stopPropagation()}
+    >
       <textarea
         ref={textareaRef}
         style={styles.textarea}
@@ -29,6 +37,8 @@ export function ChatInput() {
         rows={2}
         onChange={(e) => setValue(e.currentTarget.value)}
         onKeyDown={handleKeyDown}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
       />
       <button
         style={{ ...styles.sendBtn, ...(value.trim() ? {} : styles.sendBtnDisabled) }}

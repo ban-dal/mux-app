@@ -29,7 +29,7 @@ export function MainLayout({ selectedCli, onChangeCli }: Props) {
       {/* Center */}
       <div style={styles.center}>
         <div style={styles.terminal}>
-          <Terminal autoSpawn={{ command: selectedCli }} />
+          <Terminal autoSpawn={{}} initInput={selectedCli} />
         </div>
         <ChatInput />
       </div>
