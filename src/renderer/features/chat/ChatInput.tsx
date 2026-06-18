@@ -24,8 +24,7 @@ export function ChatInput() {
     <div
       style={{
         ...styles.root,
-        outline: isFocused ? '2px solid #3b82f6' : '2px solid transparent',
-        outlineOffset: '-2px',
+        borderTop: isFocused ? '1px solid #3b82f6' : '1px solid #2e2e2e',
       }}
       onClick={(e) => e.stopPropagation()}
     >

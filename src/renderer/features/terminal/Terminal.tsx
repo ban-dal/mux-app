@@ -101,18 +101,10 @@ export function Terminal({ autoSpawn, initInput }: Props) {
 
   return (
     <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        background: '#1e1e1e',
-        outline: isFocused ? '2px solid #3b82f6' : '2px solid transparent',
-        outlineOffset: '-2px',
-        borderRadius: 2,
-      }}
+      style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#1e1e1e' }}
       onClick={focusTerminal}
     >
-      <div style={styles.header}>
+      <div style={{ ...styles.header, borderBottom: isFocused ? '1px solid #3b82f6' : '1px solid #3e3e3e' }}>
         <span style={styles.headerTitle}>Terminal</span>
         <StatusBadge status={status} exitCode={exitInfo?.exitCode} />
         <button
@@ -151,7 +143,6 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 10,
     padding: '8px 12px',
     background: '#2d2d2d',
-    borderBottom: '1px solid #3e3e3e',
     flexShrink: 0,
   },
   headerTitle: {
