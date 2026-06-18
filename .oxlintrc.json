@@ -1,0 +1,12 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "import"],
+  "env": {
+    "browser": true,
+    "node": true
+  },
+  "ignorePatterns": [".vite/**", "coverage/**", "dist/**", "node_modules/**", "out/**"],
+  "rules": {
+    "import/no-duplicates": "error"
+  }
+}
