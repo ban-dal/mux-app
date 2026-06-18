@@ -12,12 +12,19 @@ export function MainLayout({ selectedCli, onChangeCli }: Props) {
   const [termFocusTick, setTermFocusTick] = useState(0);
   const [chatFocusTick, setChatFocusTick] = useState(0);
 
-  // Auto-focus: terminal on start (for trust dialog), chat after PTY output goes idle
+  // Auto-focus: terminal on start, switch to chat once PTY output settles.
+  // Trust dialog detection: while trust prompt is visible no new data flows —
+  // suppress the idle timer so we don't steal focus mid-dialog.
+  // Only start the idle countdown after the dialog is resolved (new data arrives).
   useEffect(() => {
     let idleTimer: ReturnType<typeof setTimeout> | null = null;
     let done = false;
+    let trustDialogActive = false;
     let removeDataFn: (() => void) | null = null;
     let removeExitFn: (() => void) | null = null;
+
+    const ANSI_RE = /\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b[()][AB012]/g;
+    const TRUST_RE = /trust.*folder|safety.{0,5}check/i;
 
     const finish = () => {
       if (done) return;
@@ -27,13 +34,31 @@ export function MainLayout({ selectedCli, onChangeCli }: Props) {
       removeExitFn?.();
     };
 
-    removeDataFn = window.pty.onData(() => {
-      if (done) return;
+    const scheduleChat = () => {
       if (idleTimer) clearTimeout(idleTimer);
       idleTimer = setTimeout(() => {
         setChatFocusTick((t) => t + 1);
         finish();
       }, 1500);
+    };
+
+    removeDataFn = window.pty.onData((data) => {
+      if (done) return;
+      const plain = data.replace(ANSI_RE, '');
+
+      if (TRUST_RE.test(plain)) {
+        // Trust dialog is on screen — suppress idle timer, keep terminal focused
+        trustDialogActive = true;
+        if (idleTimer) clearTimeout(idleTimer);
+        return;
+      }
+
+      if (trustDialogActive) {
+        // New data after trust dialog → user made a selection, CLI is loading
+        trustDialogActive = false;
+      }
+
+      scheduleChat();
     });
 
     // PTY exited (e.g. user declined trust): keep terminal focused, stop watching
