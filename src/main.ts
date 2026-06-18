@@ -1,7 +1,10 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
 import { PtyManager } from './main/pty/pty-manager';
+import { getDb, closeDb } from './main/db/database';
+import { getConfig, setConfig } from './main/db/config-repository';
+import { detectClis } from './main/cli/cli-detector';
 
 if (started) {
   app.quit();
@@ -9,11 +12,25 @@ if (started) {
 
 let ptyManager: PtyManager | null = null;
 
+function registerAppIpc(): void {
+  ipcMain.handle('app:detect-clis', () => detectClis());
+
+  ipcMain.handle('app:get-config', (_event, key: string) => getConfig(key));
+
+  ipcMain.handle('app:set-config', (_event, key: string, value: string) => {
+    setConfig(key, value);
+  });
+}
+
 const createWindow = () => {
+  // init DB early so config is available before renderer loads
+  getDb();
+
   const mainWindow = new BrowserWindow({
+    width: 1280,
     height: 820,
+    minWidth: 1000,
     minHeight: 600,
-    minWidth: 900,
     title: 'Mux',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -35,7 +52,14 @@ const createWindow = () => {
   });
 };
 
-app.on('ready', createWindow);
+app.on('ready', () => {
+  registerAppIpc();
+  createWindow();
+});
+
+app.on('before-quit', () => {
+  closeDb();
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
