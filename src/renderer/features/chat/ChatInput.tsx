@@ -8,7 +8,7 @@ export function ChatInput() {
   const send = () => {
     const text = value.trim();
     if (!text) return;
-    window.pty.sendInput(text + '\n');
+    window.pty.sendInput(text + '\r');
     setValue('');
     textareaRef.current?.focus();
   };
