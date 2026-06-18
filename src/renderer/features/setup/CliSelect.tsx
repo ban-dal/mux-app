@@ -11,12 +11,15 @@ export function CliSelect({ onSelect }: Props) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    window.muxApp.detectClis().then((result) => {
-      setClis(result);
-      const first = result.find((c) => c.available);
-      if (first) setSelected(first.id);
-      setLoading(false);
-    });
+    window.muxApp
+      .detectClis()
+      .then((result) => {
+        setClis(result);
+        const first = result.find((c) => c.available);
+        if (first) setSelected(first.id);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   }, []);
 
   const handleContinue = async () => {
@@ -49,11 +52,7 @@ export function CliSelect({ onSelect }: Props) {
                 >
                   <span style={styles.cliLabel}>{cli.label}</span>
                   <span
-                    style={{
-                      ...styles.badge,
-                      background: cli.available ? '#166534' : '#3f3f46',
-                      color: cli.available ? '#86efac' : '#71717a',
-                    }}
+                    style={cli.available ? styles.badgeAvailable : styles.badgeUnavailable}
                   >
                     {cli.available ? '사용 가능' : '설치 필요'}
                   </span>
@@ -152,11 +151,21 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 500,
     color: '#f4f4f5',
   },
-  badge: {
+  badgeAvailable: {
     fontSize: 11,
     padding: '2px 8px',
     borderRadius: 4,
     fontWeight: 500,
+    background: '#166534',
+    color: '#86efac',
+  },
+  badgeUnavailable: {
+    fontSize: 11,
+    padding: '2px 8px',
+    borderRadius: 4,
+    fontWeight: 500,
+    background: '#3f3f46',
+    color: '#71717a',
   },
   cliPath: {
     fontSize: 11,

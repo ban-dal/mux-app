@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
-import '@xterm/xterm/css/xterm.css';
 import type { SpawnOptions } from '../../../main/pty/pty-manager';
+import '@xterm/xterm/css/xterm.css';
 
 type Status = 'idle' | 'running' | 'exited';
 

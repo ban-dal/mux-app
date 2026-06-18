@@ -13,6 +13,11 @@ export function getDb(): DatabaseSync {
   return _db;
 }
 
+export function closeDb(): void {
+  _db?.close();
+  _db = null;
+}
+
 function initSchema(db: DatabaseSync): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS app_config (

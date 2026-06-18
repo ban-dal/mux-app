@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
 import { PtyManager } from './main/pty/pty-manager';
-import { getDb } from './main/db/database';
+import { getDb, closeDb } from './main/db/database';
 import { getConfig, setConfig } from './main/db/config-repository';
 import { detectClis } from './main/cli/cli-detector';
 
@@ -27,9 +27,10 @@ const createWindow = () => {
   getDb();
 
   const mainWindow = new BrowserWindow({
+    width: 1280,
     height: 820,
-    minHeight: 600,
     minWidth: 1000,
+    minHeight: 600,
     title: 'Mux',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -54,6 +55,10 @@ const createWindow = () => {
 app.on('ready', () => {
   registerAppIpc();
   createWindow();
+});
+
+app.on('before-quit', () => {
+  closeDb();
 });
 
 app.on('window-all-closed', () => {
