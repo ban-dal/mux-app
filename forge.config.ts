@@ -8,9 +8,16 @@ import { FuseV1Options, FuseVersion } from '@electron/fuses';
 
 const config: ForgeConfig = {
   packagerConfig: {
-    asar: true,
+    // Unpack native .node files from asar so Electron can load them
+    asar: {
+      unpack: '**/*.node',
+    },
   },
-  rebuildConfig: {},
+  // node-pty-prebuilt-multiarch ships its own prebuilt binaries;
+  // skip electron-rebuild so Python/MSBuild are not required
+  rebuildConfig: {
+    onlyModules: [],
+  },
   makers: [new MakerZIP({}, ['darwin']), new MakerRpm({}), new MakerDeb({})],
   plugins: [
     new VitePlugin({

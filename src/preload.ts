@@ -1,27 +1,30 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
-import type { CompletionRecord, Task, TelemetryEvent, Workspace } from './shared/types';
-
-export interface MuxRendererApi {
-  createTask(input: { prompt: string; title: string }): Promise<Task>;
-  listState(): Promise<{
-    eventsByTask: Record<string, TelemetryEvent[]>;
-    tasks: Task[];
-    workspaces: Workspace[];
-  }>;
-  runTask(taskId: string): Promise<{ command: string; durationMs: number; exitCode: number }>;
-  writeCompletionRecord(taskId: string): Promise<CompletionRecord>;
+export interface PtyApi {
+  spawn: () => Promise<void>;
+  sendInput: (data: string) => void;
+  resize: (cols: number, rows: number) => void;
+  onData: (callback: (data: string) => void) => () => void;
+  onExit: (callback: (info: { exitCode: number; signal: number }) => void) => () => void;
 }
 
-const muxApi: MuxRendererApi = {
-  createTask: (input) => ipcRenderer.invoke('mux:create-task', input) as Promise<Task>,
-  listState: () => ipcRenderer.invoke('mux:list-state') as ReturnType<MuxRendererApi['listState']>,
-  runTask: (taskId) =>
-    ipcRenderer.invoke('mux:run-task', taskId) as ReturnType<MuxRendererApi['runTask']>,
-  writeCompletionRecord: (taskId) =>
-    ipcRenderer.invoke('mux:write-completion-record', taskId) as ReturnType<
-      MuxRendererApi['writeCompletionRecord']
-    >,
+const ptyApi: PtyApi = {
+  spawn: () => ipcRenderer.invoke('pty:spawn'),
+  sendInput: (data) => ipcRenderer.send('pty:input', data),
+  resize: (cols, rows) => ipcRenderer.send('pty:resize', cols, rows),
+  onData: (callback) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: string) => callback(data);
+    ipcRenderer.on('pty:data', handler);
+    return () => ipcRenderer.removeListener('pty:data', handler);
+  },
+  onExit: (callback) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      info: { exitCode: number; signal: number },
+    ) => callback(info);
+    ipcRenderer.on('pty:exit', handler);
+    return () => ipcRenderer.removeListener('pty:exit', handler);
+  },
 };
 
-contextBridge.exposeInMainWorld('mux', muxApi);
+contextBridge.exposeInMainWorld('pty', ptyApi);
