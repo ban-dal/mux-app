@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import type { CliId } from '../../main/cli/cli-detector';
 import { Terminal } from '../features/terminal/Terminal';
 import { ChatInput } from '../features/chat/ChatInput';
@@ -8,6 +9,42 @@ interface Props {
 }
 
 export function MainLayout({ selectedCli, onChangeCli }: Props) {
+  const [termFocusTick, setTermFocusTick] = useState(0);
+  const [chatFocusTick, setChatFocusTick] = useState(0);
+
+  // Auto-focus: terminal on start (for trust dialog), chat after PTY output goes idle
+  useEffect(() => {
+    let idleTimer: ReturnType<typeof setTimeout> | null = null;
+    let done = false;
+    let removeDataFn: (() => void) | null = null;
+    let removeExitFn: (() => void) | null = null;
+
+    const finish = () => {
+      if (done) return;
+      done = true;
+      if (idleTimer) clearTimeout(idleTimer);
+      removeDataFn?.();
+      removeExitFn?.();
+    };
+
+    removeDataFn = window.pty.onData(() => {
+      if (done) return;
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        setChatFocusTick((t) => t + 1);
+        finish();
+      }, 1500);
+    });
+
+    // PTY exited (e.g. user declined trust): keep terminal focused, stop watching
+    removeExitFn = window.pty.onExit(() => {
+      setTermFocusTick((t) => t + 1);
+      finish();
+    });
+
+    return finish;
+  }, []);
+
   return (
     <div style={styles.root}>
       {/* LNB */}
@@ -29,9 +66,9 @@ export function MainLayout({ selectedCli, onChangeCli }: Props) {
       {/* Center */}
       <div style={styles.center}>
         <div style={styles.terminal}>
-          <Terminal autoSpawn={{}} initInput={selectedCli} />
+          <Terminal autoSpawn={{}} initInput={selectedCli} focusTick={termFocusTick} />
         </div>
-        <ChatInput />
+        <ChatInput focusTick={chatFocusTick} />
       </div>
 
       {/* Right panel */}

@@ -11,9 +11,11 @@ interface Props {
   autoSpawn?: SpawnOptions;
   /** If provided, sent to stdin immediately after the PTY spawns (e.g. 'claude') */
   initInput?: string;
+  /** Increment to imperatively request focus */
+  focusTick?: number;
 }
 
-export function Terminal({ autoSpawn, initInput }: Props) {
+export function Terminal({ autoSpawn, initInput, focusTick }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -42,6 +44,7 @@ export function Terminal({ autoSpawn, initInput }: Props) {
 
     termRef.current = term;
     fitAddonRef.current = fitAddon;
+    term.focus();
 
     // xterm.js routes keyboard input through an internal hidden textarea
     const onTermFocus = () => setIsFocused(true);
@@ -82,6 +85,10 @@ export function Terminal({ autoSpawn, initInput }: Props) {
     // autoSpawn is intentionally excluded — only run on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (focusTick && focusTick > 0) termRef.current?.focus();
+  }, [focusTick]);
 
   const doSpawn = async (opts?: SpawnOptions, afterInput?: string) => {
     setStatus('running');
