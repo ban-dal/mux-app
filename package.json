@@ -7,6 +7,7 @@
   "private": true,
   "scripts": {
     "start": "electron-forge start",
+    "build": "electron-forge package",
     "package": "electron-forge package",
     "make": "electron-forge make",
     "publish": "electron-forge publish",
@@ -15,7 +16,10 @@
     "lint:fix": "oxlint . --fix",
     "format": "oxfmt . --write",
     "format:check": "oxfmt . --check",
-    "typecheck": "tsc --noEmit"
+    "test": "vitest run",
+    "test:run": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "mux:stub-runner": "node scripts/mux-stub-runner.mjs"
   },
   "keywords": [],
   "author": {
@@ -38,14 +42,20 @@
     "@electron-forge/plugin-vite": "^7.11.2",
     "@electron/fuses": "^1.8.0",
     "@types/electron-squirrel-startup": "^1.0.2",
+    "@types/node": "^25.9.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
     "electron": "42.4.1",
     "husky": "^9.1.7",
     "oxfmt": "0.55.0",
     "oxlint": "1.70.0",
     "typescript": "^5.9.3",
-    "vite": "^8.0.16"
+    "vite": "^8.0.16",
+    "vitest": "^4.1.9"
   },
   "dependencies": {
-    "electron-squirrel-startup": "^1.0.1"
+    "electron-squirrel-startup": "^1.0.1",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
   }
 }

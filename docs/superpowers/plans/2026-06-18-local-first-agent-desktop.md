@@ -68,27 +68,27 @@ The app can create a local task, run a dummy command, display or link a terminal
 
 ### Tasks
 
-- [ ] Create Electron + React + TypeScript project skeleton.
-- [ ] Add `Task`, `AgentSession`, `TerminalSession`, `TelemetryEvent`, `CompletionRecord` shared types.
-- [ ] Create SQLite schema for workspaces, tasks, agent_sessions, terminal_sessions, telemetry_events, completion_records.
-- [ ] Implement repository functions for task create/list/update.
-- [ ] Implement append-only telemetry event writer.
-- [ ] Build task board with Draft, Running, Completed, Failed columns.
-- [ ] Build task detail view showing prompt, status, event timeline, and terminal placeholder.
-- [ ] Implement `StubRunner` that runs a deterministic local command.
-- [ ] Connect `Run Task` button to runner through IPC.
-- [ ] Persist process start, stdout line, stderr line, exit code, and duration events.
-- [ ] Create terminal bridge interface with `openSession`, `attachToTask`, `disposeSession`.
-- [ ] Implement stub terminal panel that displays captured stdout/stderr.
-- [ ] Add `docs/mvp-records/MVP-00-feasibility-spine.md` using the template.
-- [ ] Verify app can run end-to-end from new task to completion record.
+- [x] Create Electron + React + TypeScript project skeleton.
+- [x] Add `Task`, `AgentSession`, `TerminalSession`, `TelemetryEvent`, `CompletionRecord` shared types.
+- [x] Create SQLite schema for workspaces, tasks, agent_sessions, terminal_sessions, telemetry_events, completion_records.
+- [x] Implement repository functions for task create/list/update.
+- [x] Implement append-only telemetry event writer.
+- [x] Build task board with Draft, Running, Completed, Failed columns.
+- [x] Build task detail view showing prompt, status, event timeline, and terminal placeholder.
+- [x] Implement `StubRunner` that runs a deterministic local command.
+- [x] Connect `Run Task` button to runner through IPC.
+- [x] Persist process start, stdout line, stderr line, exit code, and duration events.
+- [x] Create terminal bridge interface with `openSession`, `attachToTask`, `disposeSession`.
+- [x] Implement stub terminal panel that displays captured stdout/stderr.
+- [x] Add `docs/mvp-records/MVP-00-feasibility-spine.md` using the template.
+- [x] Verify app can run end-to-end from new task to completion record.
 
 ### Verification
 
-- [ ] `pnpm lint` passes.
-- [ ] `pnpm typecheck` passes.
-- [ ] Unit tests for repositories pass.
-- [ ] Integration test verifies task -> runner -> events -> completion record.
+- [x] `pnpm lint` passes.
+- [x] `pnpm typecheck` passes.
+- [x] Unit tests for repositories pass.
+- [x] Integration test verifies task -> runner -> events -> completion record.
 - [ ] Manual smoke test creates one task and observes events in GUI.
 
 ### Completion Record Must Include
