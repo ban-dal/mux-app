@@ -1,121 +1,48 @@
-# MVP 00 - Feasibility Spine
+# MVP 00 - PTY Terminal Spike
 
 ## 기본 정보
 
-- MVP: MVP 0 - Feasibility Spine
-- 완료일: 2026-06-18
+- MVP: MVP 0 - PTY Terminal Spike
+- 상태: **미완료**
 - 관련 plan: `docs/superpowers/plans/2026-06-18-local-first-agent-desktop.md`
+- 관련 spec: `docs/superpowers/specs/2026-06-18-local-first-agent-desktop-design.md`
 
-## 목표
+## 이전 구현 상태
 
-GUI에서 task를 만들고 stub command를 실행한 뒤, stdout/stderr와 process lifecycle event를 SQLite에 저장하고 completion record까지 남기는 최소 세로 흐름을 검증한다.
+초기 MVP 0으로 아래 코드가 작성되었으나 핵심 목표(PTY + xterm.js 검증)를 달성하지 못했다. 해당 코드는 MVP 1 이후 재사용 가능하다.
 
-## 변경 요약
+재사용 가능한 코드:
+- `src/main/db/`: SQLite schema + repositories
+- `src/shared/types.ts`: Task, AgentSession, TelemetryEvent 등 shared types
+- `src/main/app/runtime.ts`: Electron app 기반 구조
 
-- Electron Forge + Vite 기반 앱에 React renderer를 연결했다.
-- `Task`, `AgentSession`, `TerminalSession`, `TelemetryEvent`, `CompletionRecord` shared type을 추가했다.
-- Node `node:sqlite` 기반 local SQLite schema와 repository를 추가했다.
-- Draft, Running, Completed, Failed column을 가진 task board와 task detail view를 만들었다.
-- `Run Task` IPC가 deterministic stub runner를 실행하고 telemetry event를 저장하도록 연결했다.
-- Stub terminal panel이 저장된 stdout/stderr/process event를 표시한다.
-- MVP 0 repository 단위 테스트와 task -> runner -> events -> completion record 통합 테스트를 추가했다.
+재사용 불가 (교체 대상):
+- `src/main/runner/stub-runner.ts`: stub runner → node-pty PTY manager로 교체
+- `src/main/terminal/terminal-bridge.ts`: stub → xterm.js 연동으로 교체
+- `src/renderer.tsx`: 전면 재작성 (새 레이아웃)
 
-## 선택한 앱 런타임
+## MVP 0 목표
 
-Electron + React + TypeScript를 선택했다. Node process orchestration, local filesystem, SQLite, future CLI runner 통합을 main process에서 바로 다룰 수 있고, renderer에서는 task board와 detail GUI를 빠르게 만들 수 있기 때문이다.
+node-pty + xterm.js가 Windows Electron 환경에서 실제로 동작함을 증명한다.
 
-## 실제 SQLite Schema
+### 완료 기준
 
-```sql
-CREATE TABLE IF NOT EXISTS workspaces (
-  id TEXT PRIMARY KEY,
-  label TEXT NOT NULL,
-  path TEXT NOT NULL,
-  created_at TEXT NOT NULL
-);
+- [ ] `pnpm build` — node-pty native module이 포함된 상태로 빌드 성공.
+- [ ] `pnpm typecheck` 통과.
+- [ ] `pnpm lint` 통과.
+- [ ] xterm.js terminal이 renderer에서 렌더링된다.
+- [ ] node-pty가 main process에서 cmd.exe를 PTY로 실행한다.
+- [ ] IPC를 통해 PTY output이 xterm.js에 실시간 스트리밍된다.
+- [ ] IPC를 통해 xterm.js keyboard input이 PTY stdin으로 전달된다.
+- [ ] PTY process exit가 감지되고 GUI 상태에 반영된다.
+- [ ] Manual: `dir` 입력 후 출력 확인.
+- [ ] Manual: `exit` 입력 후 터미널 패널 닫힘 확인.
 
-CREATE TABLE IF NOT EXISTS tasks (
-  id TEXT PRIMARY KEY,
-  workspace_id TEXT NOT NULL REFERENCES workspaces(id),
-  title TEXT NOT NULL,
-  prompt TEXT NOT NULL,
-  status TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  started_at TEXT,
-  completed_at TEXT
-);
+## 완료 시 기록할 항목
 
-CREATE TABLE IF NOT EXISTS agent_sessions (
-  id TEXT PRIMARY KEY,
-  task_id TEXT NOT NULL REFERENCES tasks(id),
-  role TEXT NOT NULL,
-  command TEXT NOT NULL,
-  status TEXT NOT NULL,
-  started_at TEXT NOT NULL,
-  completed_at TEXT
-);
-
-CREATE TABLE IF NOT EXISTS terminal_sessions (
-  id TEXT PRIMARY KEY,
-  task_id TEXT NOT NULL REFERENCES tasks(id),
-  agent_session_id TEXT NOT NULL REFERENCES agent_sessions(id),
-  adapter TEXT NOT NULL,
-  title TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  disposed_at TEXT
-);
-
-CREATE TABLE IF NOT EXISTS telemetry_events (
-  id TEXT PRIMARY KEY,
-  task_id TEXT NOT NULL REFERENCES tasks(id),
-  agent_session_id TEXT REFERENCES agent_sessions(id),
-  terminal_session_id TEXT REFERENCES terminal_sessions(id),
-  type TEXT NOT NULL,
-  message TEXT NOT NULL,
-  metadata_json TEXT NOT NULL,
-  created_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS completion_records (
-  id TEXT PRIMARY KEY,
-  task_id TEXT NOT NULL REFERENCES tasks(id),
-  file_path TEXT NOT NULL,
-  summary TEXT NOT NULL,
-  created_at TEXT NOT NULL
-);
-```
-
-## Stub Runner
-
-- Exact command represented in telemetry and records: `pnpm mux:stub-runner`
-- 실제 실행은 main process에서 `node scripts/mux-stub-runner.mjs`를 spawn한다.
-- 저장 이벤트: `process_started`, `stdout_line`, `stderr_line`, `process_exited`
-- exit code 0이면 task와 agent session을 `completed`로 갱신한다.
-
-## Terminal Bridge Limitation
-
-`TerminalBridge` interface는 `openSession`, `attachToTask`, `disposeSession`을 가진다. MVP 0 구현은 Ghostty와 연결하지 않고 stub terminal panel에서 captured output을 표시한다.
-
-## First Known Ghostty Risk
-
-Ghostty를 Electron 내부에 직접 embed할 수 있을지 아직 검증하지 않았다. MVP 1 이후에는 companion terminal control, pane/tab mapping, scrollback export 중 어떤 방식이 안정적인지 별도 spike가 필요하다.
-
-## 검증
-
-- `pnpm lint`: pass
-- `pnpm typecheck`: pass
-- `pnpm test`: pass, 2 files / 2 tests
-- `pnpm build`: pass
-
-`pnpm test` 실행 시 Node `node:sqlite`의 experimental warning이 출력된다. 테스트와 빌드는 실패하지 않는다.
-
-## 남은 위험
-
-- GUI 수동 smoke test는 자동화하지 못했다. Electron 창에서 New Task -> Run Task -> Write Record를 직접 확인해야 한다.
-- SQLite API가 Node 24 기준 experimental warning을 출력한다.
-- completion record 생성은 task별 Markdown 작성까지 가능하지만, GUI에서 record path를 보여주는 뷰는 아직 없다.
-
-## 다음 시작 지점
-
-MVP 1은 workspace registration 화면부터 시작한다. 이어서 runner settings, shell runner, Codex/Claude command profile, cancellation, git status snapshot을 붙이면 된다.
+- node-pty 버전 + Electron 버전
+- electron-rebuild 설정
+- ConPTY (Windows) 동작 여부
+- xterm.js addon 목록
+- IPC 채널명과 데이터 포맷
+- 다음 시작 지점 (MVP 1)
